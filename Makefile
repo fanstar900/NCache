@@ -1,11 +1,12 @@
 CXX = g++
-CXXFLAGS = -std=c++17 -Wall -pthread -MMD -MP -O2
+CXXFLAGS = -std=c++17 -Wall -Wextra -pthread -MMD -MP -O2 -Iinclude
 
 SRC_DIR = src
 BUILD_DIR = build
 
 SRCS := $(wildcard $(SRC_DIR)/*.cpp)
 OBJS := $(patsubst $(SRC_DIR)/%.cpp, $(BUILD_DIR)/%.o, $(SRCS))
+DEPS := $(OBJS:.o=.d)
 
 TARGET = my_redis_server
 
@@ -27,3 +28,8 @@ rebuild: clean all
 
 run: all
 	./$(TARGET)
+
+.PHONY: all clean rebuild run
+
+# Rebuild objects when headers change
+-include $(DEPS)

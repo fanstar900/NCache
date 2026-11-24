@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 set -e
 
+# Usage: ./test_all.sh [port]   (default 6379)
+PORT="${1:-6379}"
+
 # Filter out comment lines, then pipe into redis-cli:
-sed '/^#/d' << 'EOF' | redis-cli -p 6379
+sed '/^#/d' << 'EOF' | redis-cli -p "$PORT"
 # 1) Start clean
 FLUSHALL
 
@@ -18,7 +21,7 @@ TYPE mykey
 DEL mykey
 SET session1 foo
 EXPIRE session1 1
-GET session1         # after ~1s should return (nil)
+GET session1
 RENAME session1 session2
 GET session2
 

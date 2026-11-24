@@ -114,10 +114,10 @@ OK
 ### Key/Value
 - **SET**: `SET <key> <value>` → store string
 - **GET**: `GET <key>` → retrieve string or nil
-- **KEYS**: `KEYS *` → list all keys
+- **KEYS**: `KEYS <pattern>` → keys matching a glob pattern (e.g. `KEYS user:*`)
 - **TYPE**: `TYPE <key>` → `string`/`list`/`hash`/`none`
-- **DEL/UNLINK**: `DEL <key>` → delete key
-- **EXPIRE**: `EXPIRE <key> <seconds>` → set TTL
+- **DEL/UNLINK**: `DEL <key> [key ...]` → number of keys deleted
+- **EXPIRE**: `EXPIRE <key> <seconds>` → `1` if set, `0` if key missing (≤0 deletes the key)
 - **RENAME**: `RENAME <old> <new>` → rename key
 
 ### Lists
@@ -130,10 +130,10 @@ OK
 - **LSET**: `LSET <key> <index> <value>` → set element
 
 ### Hashes
-- **HSET**: `HSET <key> <field> <value>`
+- **HSET**: `HSET <key> <field> <value> [field value ...]` → number of new fields
 - **HGET**: `HGET <key> <field>`
 - **HEXISTS**: `HEXISTS <key> <field>`
-- **HDEL**: `HDEL <key> <field>`
+- **HDEL**: `HDEL <key> <field> [field ...]` → number of fields removed
 - **HLEN**: `HLEN <key>` → field count
 - **HKEYS**: `HKEYS <key>` → all fields
 - **HVALS**: `HVALS <key>` → all values
@@ -144,14 +144,17 @@ OK
 
 ## Design & Architecture
 
-- **Concurrency:** Each client is handled in its own `std::thread`.  
+- **Concurrency:** Each client is handled in its own detached `std::thread`; the server tracks them and waits for all to finish on shutdown.  
+- **Framing:** Each connection keeps a receive buffer, so commands split across TCP packets and pipelined commands are handled correctly.  
 - **Synchronization:** A single `std::mutex db_mutex` guards all in-memory stores.  
 - **Data Stores:**  
   - `kv_store` (`unordered_map<string,string>`) for strings  
   - `list_store` (`unordered_map<string,vector<string>>`) for lists  
   - `hash_store` (`unordered_map<string,unordered_map<string,string>>`) for hashes
-- **Expiration:** Lazy eviction on each access via `purgeExpired()`, plus TTL map `expiry_map`.  
-- **Persistence:** Simplified RDB: text‐based dump/load in `dump.my_rdb`.  
+- **Types:** A key holds exactly one type; using the wrong command for it returns `WRONGTYPE`. Empty lists/hashes are removed.  
+- **Expiration:** Lazy eviction on every command via `purgeExpired()`, plus TTL map `expiry_map`. `SET` clears a key's TTL.  
+- **Persistence:** Length-prefixed text format in `dump.my_rdb` (binary-safe, includes TTLs), written to a temp file and renamed atomically.  
+- **Shutdown:** SIGINT/SIGTERM are received by a dedicated `sigwait()` thread, which stops the server cleanly before the final dump.  
 - **Singleton Pattern:** `RedisDatabase::getInstance()` enforces one shared instance.  
 - **RESP Parsing:** Custom parser in `RedisCommandHandler` supports both inline and array formats.
 
